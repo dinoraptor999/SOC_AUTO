@@ -1,0 +1,9 @@
+flowchart LR
+  W[Wazuh] --> L[Logstash]
+  S[Suricata] --> L
+  O[OPNsense] --> L
+  L --> F[features.py]
+  F --> I[Isolation Forest]
+  I --> A[FastAPI]
+  A --> T[TV4 incident response]
+  L --> E[Elasticsearch]

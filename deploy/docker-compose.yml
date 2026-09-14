@@ -1,0 +1,13 @@
+services:
+  ai-service:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../models:/app/models
+    environment:
+      THRESHOLD_PATH: /app/models/threshold.json
+      MODEL_PATH: /app/models/isolation_forest.pkl
+      LOG_LEVEL: INFO

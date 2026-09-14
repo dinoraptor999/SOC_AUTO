@@ -1,0 +1,12 @@
+flowchart TB
+  subgraph Sources
+    W[Wazuh]
+    S[Suricata]
+    O[OPNsense]
+  end
+  T2[TV2: Logstash] --> E[Elasticsearch]
+  Sources --> T2
+  T2 --> AI[TV3: SOC Auto AI]
+  AI --> T4[TV4: Detection and Response]
+  AI --> M[Model artifacts]
+  T4 --> E
