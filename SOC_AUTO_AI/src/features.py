@@ -1,5 +1,6 @@
 """Feature extraction and persisted preprocessing artifacts."""
 
+from datetime import datetime
 from pathlib import Path
 
 import joblib
@@ -30,7 +31,50 @@ def extract_features(record: dict) -> dict:
         ),
         "is_failed_auth": int(event_type == "auth" and failed_count > 0),
         "bytes_per_failed": byte_count / failed_count if failed_count else byte_count,
+        "failed_ratio": _failed_ratio(failed_count, byte_count),
+        "is_high_failed": _is_high_failed(failed_count),
+        "is_scan_port": _is_scan_port(dst_port, failed_count),
+        "is_night_time": _is_night_time(record.get("timestamp")),
+        "is_high_bytes": _is_high_bytes(byte_count),
+        "is_low_bytes": _is_low_bytes(byte_count),
     }
+
+
+def _failed_ratio(failed_count: int, byte_count: float) -> float:
+    """Calculate failed events relative to transferred bytes."""
+    return failed_count / (byte_count + 1)
+
+
+def _is_high_failed(failed_count: int) -> int:
+    """Flag events with more than ten failed attempts."""
+    return int(failed_count > 10)
+
+
+def _is_scan_port(dst_port: int, failed_count: int) -> int:
+    """Flag repeated failures against common scan-target ports."""
+    return int(dst_port in {22, 23, 445, 3389} and failed_count > 5)
+
+
+def _is_night_time(timestamp: object) -> int:
+    """Flag timestamps whose event hour falls between midnight and 6 AM."""
+    if not timestamp:
+        return 0
+    try:
+        value = str(timestamp).replace("Z", "+00:00")
+        hour = datetime.fromisoformat(value).hour
+    except (TypeError, ValueError):
+        return 0
+    return int(0 <= hour <= 6)
+
+
+def _is_high_bytes(byte_count: float) -> int:
+    """Flag events carrying more than 100,000 bytes."""
+    return int(byte_count > 100000)
+
+
+def _is_low_bytes(byte_count: float) -> int:
+    """Flag events carrying fewer than 100 bytes."""
+    return int(byte_count < 100)
 
 
 def build_feature_matrix(
@@ -131,3 +175,14 @@ def load_encoders(path: Path = MODELS_DIR) -> dict[str, LabelEncoder]:
         "protocol": joblib.load(model_dir / "le_protocol.pkl"),
         "event_type": joblib.load(model_dir / "le_event_type.pkl"),
     }
+
+
+if __name__ == "__main__":
+    from src.config import FEATURES_PATH, RAW_DATA_PATH
+    from src.utils import load_jsonl
+
+    sample_records = load_jsonl(RAW_DATA_PATH)
+    sample_matrix, _, _ = build_feature_matrix(sample_records)
+    save_features(sample_matrix, FEATURES_PATH)
+    print(f"Processed {len(sample_records)} records into {sample_matrix.shape}")
+    print(f"Saved features to {FEATURES_PATH}")

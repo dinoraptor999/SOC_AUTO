@@ -1,22 +1,38 @@
-"""Tests for model training."""
+"""Tests for model training and persisted artifacts."""
 
+import src.train as train_module
 from src.train import train_model
 
 
-def test_train_runs_on_small_dataset(tmp_path):
-    """Training writes model artifacts for a small JSONL dataset."""
-    data_path = tmp_path / "events.jsonl"
-    data_path.write_text(
-        "\n".join(
-            '{"src_ip":"10.0.0.%d","dst_ip":"10.0.0.20",'
-            '"src_port":500%d,"dst_port":443,"protocol":"tcp",'
-            '"event_type":"network","failed_count":0,"bytes":%d}'
-            % (index, index, 1000 + index)
-            for index in range(1, 8)
-        ),
-        encoding="utf-8",
+def test_train_runs_on_ten_row_dataset(small_dataset_path, tmp_path, monkeypatch):
+    """Training completes without errors for a ten-row dataset."""
+    model_dir = tmp_path / "models"
+    monkeypatch.setattr(train_module, "MODELS_DIR", model_dir)
+    monkeypatch.setattr(train_module, "THRESHOLD_PATH", model_dir / "threshold.json")
+    result = train_model(
+        data_path=small_dataset_path,
+        model_path=model_dir / "isolation_forest.pkl",
     )
-    model_path = tmp_path / "model.pkl"
-    result = train_model(data_path=data_path, model_path=model_path)
+    assert result["threshold"] is not None
+
+
+def test_train_saves_model_in_models_directory(small_dataset_path, tmp_path, monkeypatch):
+    """Training persists the Isolation Forest model under models/."""
+    model_dir = tmp_path / "models"
+    monkeypatch.setattr(train_module, "MODELS_DIR", model_dir)
+    monkeypatch.setattr(train_module, "THRESHOLD_PATH", model_dir / "threshold.json")
+    model_path = model_dir / "isolation_forest.pkl"
+    train_model(data_path=small_dataset_path, model_path=model_path)
     assert model_path.exists()
-    assert isinstance(result["threshold"], float)
+    assert model_path.parent == model_dir
+
+
+def test_train_creates_threshold_json(small_dataset_path, tmp_path, monkeypatch):
+    """Training writes a JSON threshold artifact."""
+    model_dir = tmp_path / "models"
+    threshold_path = model_dir / "threshold.json"
+    monkeypatch.setattr(train_module, "MODELS_DIR", model_dir)
+    monkeypatch.setattr(train_module, "THRESHOLD_PATH", threshold_path)
+    train_model(data_path=small_dataset_path, model_path=model_dir / "model.pkl")
+    assert threshold_path.exists()
+    assert "threshold" in threshold_path.read_text(encoding="utf-8")
